@@ -167,8 +167,9 @@ document.addEventListener("DOMContentLoaded", event => {
 });
 // Splash texts
 const SplashT = [
-  "Interstellar, the OG version by airtagdev",
+  "Interstellar, the OG version by airtagdev (Anderson)",
   "Removed ads for your convinience :)",
+  "🤫🤫🤫🤫🤫",
 ];
 
 let SplashI = Math.floor(Math.random() * SplashT.length);
