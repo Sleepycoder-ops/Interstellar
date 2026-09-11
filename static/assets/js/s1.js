@@ -304,7 +304,7 @@ function EngineChange(dropdown) {
   const selectedEngine = dropdown.value;
 
   const engineUrls = {
-    Brave: "https://search.brave.com/search?q=",
+    Brave: "https://duckduckgo.com/search?q=",
     Google: "https://www.google.com/search?q=",
     Bing: "https://www.bing.com/search?q=",
     Qwant: "https://www.qwant.com/?q=",
