@@ -3,7 +3,7 @@
 document.addEventListener("DOMContentLoaded", () => {
   function adChange(selectedValue) {
     if (selectedValue === "default") {
-      localStorage.setItem("ads", "on");
+      localStorage.setItem("ads", "off");
     } else if (selectedValue === "popups") {
       localStorage.setItem("ads", "popups");
     } else if (selectedValue === "off") {
@@ -304,7 +304,7 @@ function EngineChange(dropdown) {
   const selectedEngine = dropdown.value;
 
   const engineUrls = {
-    Brave: "https://duckduckgo.com/search?q=",
+    Brave: "https://www.duckduckgo.com/search?q=",
     Google: "https://www.google.com/search?q=",
     Bing: "https://www.bing.com/search?q=",
     Qwant: "https://www.qwant.com/?q=",
