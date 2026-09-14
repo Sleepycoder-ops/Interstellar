@@ -1,26 +1,33 @@
 import fs from "node:fs";
 import http from "node:http";
 import path from "node:path";
+
 import { createBareServer } from "@nebula-services/bare-server-node";
+import bareMuxNode from "@mercuryworkshop/bare-mux/node";
+import { server as wisp } from "@mercuryworkshop/wisp-js/server";
+
 import chalk from "chalk";
 import cookieParser from "cookie-parser";
 import cors from "cors";
 import express from "express";
 import basicAuth from "express-basic-auth";
-import bareMuxNode from "@mercuryworkshop/bare-mux/node";
-import { server as wisp } from "@mercuryworkshop/wisp-js/server";
 import mime from "mime";
 import fetch from "node-fetch";
+
 // import { setupMasqr } from "./Masqr.js";
 import config from "./config.js";
 
 console.log(chalk.yellow("🚀 Starting server..."));
 
 const __dirname = process.cwd();
+const PORT = process.env.PORT || 8080;
+
 const server = http.createServer();
 const app = express();
+
 const bareServer = createBareServer("/ca/");
 const { baremuxPath } = bareMuxNode;
+
 const epoxyDistPath = path.join(
   __dirname,
   "node_modules",
@@ -28,30 +35,48 @@ const epoxyDistPath = path.join(
   "epoxy-transport",
   "dist",
 );
-const PORT = process.env.PORT || 8080;
-const cache = new Map();
-const CACHE_TTL = 30 * 24 * 60 * 60 * 1000; // Cache for 30 Days
 
+const cache = new Map();
+const CACHE_TTL = 30 * 24 * 60 * 60 * 1000; // 30 days
+
+// Wisp configuration
 wisp.options.allow_loopback_ips = true;
 wisp.options.allow_private_ips = true;
 
+// Password protection
 if (config.challenge !== false) {
-  console.log(chalk.green("🔒 Password protection is enabled! Listing logins below"));
+  console.log(
+    chalk.green("🔒 Password protection is enabled! Listing logins below"),
+  );
+
   // biome-ignore lint: idk
   Object.entries(config.users).forEach(([username, password]) => {
-    console.log(chalk.blue(`Username: ${username}, Password: ${password}`));
+    console.log(
+      chalk.blue(`Username: ${username}, Password: ${password}`),
+    );
   });
-  app.use(basicAuth({ users: config.users, challenge: true }));
+
+  app.use(
+    basicAuth({
+      users: config.users,
+      challenge: true,
+    }),
+  );
 }
 
+// External asset proxy/cache
 app.get("/e/*", async (req, res, next) => {
   try {
     if (cache.has(req.path)) {
       const { data, contentType, timestamp } = cache.get(req.path);
+
       if (Date.now() - timestamp > CACHE_TTL) {
         cache.delete(req.path);
       } else {
-        res.writeHead(200, { "Content-Type": contentType });
+        res.writeHead(200, {
+          "Content-Type": contentType,
+        });
+
         return res.end(data);
       }
     }
@@ -63,6 +88,7 @@ app.get("/e/*", async (req, res, next) => {
     };
 
     let reqTarget;
+
     for (const [prefix, baseUrl] of Object.entries(baseUrls)) {
       if (req.path.startsWith(prefix)) {
         reqTarget = baseUrl + req.path.slice(prefix.length);
@@ -75,37 +101,56 @@ app.get("/e/*", async (req, res, next) => {
     }
 
     const asset = await fetch(reqTarget);
+
     if (!asset.ok) {
       return next();
     }
 
     const data = Buffer.from(await asset.arrayBuffer());
     const ext = path.extname(reqTarget);
-    const no = [".unityweb"];
-    const contentType = no.includes(ext) ? "application/octet-stream" : mime.getType(ext);
 
-    cache.set(req.path, { data, contentType, timestamp: Date.now() });
-    res.writeHead(200, { "Content-Type": contentType });
+    const noContentType = [".unityweb"];
+
+    const contentType = noContentType.includes(ext)
+      ? "application/octet-stream"
+      : mime.getType(ext) || "application/octet-stream";
+
+    cache.set(req.path, {
+      data,
+      contentType,
+      timestamp: Date.now(),
+    });
+
+    res.writeHead(200, {
+      "Content-Type": contentType,
+    });
+
     res.end(data);
   } catch (error) {
     console.error("Error fetching asset:", error);
+
     res.setHeader("Content-Type", "text/html");
     res.status(500).send("Error fetching the asset");
   }
 });
 
+// Express middleware
 app.use(cookieParser());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-/* if (process.env.MASQR === "true") {
+/*
+if (process.env.MASQR === "true") {
   console.log(chalk.green("Masqr is enabled"));
   setupMasqr(app);
-} */
+}
+*/
 
+// Static transport files
 const transportStaticOptions = {
   setHeaders: (res, filePath) => {
     const ext = path.extname(filePath);
+
     if (ext === ".mjs" || ext === ".js") {
       res.type("text/javascript");
     } else if (ext === ".wasm") {
@@ -114,11 +159,32 @@ const transportStaticOptions = {
   },
 };
 
-app.use(express.static(path.join(__dirname, "static")));
-app.use("/ca", cors({ origin: true }));
-app.use("/bm", express.static(baremuxPath, transportStaticOptions));
-app.use("/ep", express.static(epoxyDistPath, transportStaticOptions));
+// Main static files
+app.use(
+  express.static(path.join(__dirname, "static")),
+);
 
+// Bare-mux CORS
+app.use(
+  "/ca",
+  cors({
+    origin: true,
+  }),
+);
+
+// Bare-mux client files
+app.use(
+  "/bm",
+  express.static(baremuxPath, transportStaticOptions),
+);
+
+// Epoxy transport files
+app.use(
+  "/ep",
+  express.static(epoxyDistPath, transportStaticOptions),
+);
+
+// Application routes
 const routes = [
   { path: "/b", file: "apps.html" },
   { path: "/a", file: "games.html" },
@@ -129,21 +195,31 @@ const routes = [
 ];
 
 // biome-ignore lint: idk
-routes.forEach(route => {
+routes.forEach((route) => {
   app.get(route.path, (_req, res) => {
-    res.sendFile(path.join(__dirname, "static", route.file));
+    res.sendFile(
+      path.join(__dirname, "static", route.file),
+    );
   });
 });
 
-app.use((req, res, next) => {
-  res.status(404).sendFile(path.join(__dirname, "static", "404.html"));
+// 404 handler
+app.use((req, res) => {
+  res
+    .status(404)
+    .sendFile(path.join(__dirname, "static", "404.html"));
 });
 
+// Error handler
 app.use((err, req, res, next) => {
   console.error(err.stack);
-  res.status(500).sendFile(path.join(__dirname, "static", "404.html"));
+
+  res
+    .status(500)
+    .sendFile(path.join(__dirname, "static", "404.html"));
 });
 
+// HTTP request routing
 server.on("request", (req, res) => {
   if (bareServer.shouldRoute(req)) {
     bareServer.routeRequest(req, res);
@@ -152,6 +228,7 @@ server.on("request", (req, res) => {
   }
 });
 
+// WebSocket upgrade routing
 server.on("upgrade", (req, socket, head) => {
   if (bareServer.shouldRoute(req)) {
     bareServer.routeUpgrade(req, socket, head);
@@ -160,8 +237,15 @@ server.on("upgrade", (req, socket, head) => {
   }
 });
 
+// Server startup
 server.on("listening", () => {
-  console.log(chalk.green(`🌍 Server is running on http://localhost:${PORT}`));
+  console.log(
+    chalk.green(
+      `🌍 Server is running on http://localhost:${PORT}`,
+    ),
+  );
 });
 
-server.listen({ port: PORT });
+server.listen({
+  port: PORT,
+});
