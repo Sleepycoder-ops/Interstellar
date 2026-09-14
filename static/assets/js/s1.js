@@ -5,7 +5,7 @@ document.addEventListener("DOMContentLoaded", () => {
     if (selectedValue === "default") {
       localStorage.setItem("ads", "off");
     } else if (selectedValue === "popups") {
-      localStorage.setItem("ads", "popups");
+      localStorage.setItem("ads", "off");
     } else if (selectedValue === "off") {
       localStorage.setItem("ads", "off");
     }
